@@ -1,0 +1,560 @@
+
+-- ══════════════════════════════════════════
+--  ⚙  CONFIG — Customize here
+-- ══════════════════════════════════════════
+local CONFIG = {
+    -- Hub info
+    HUB_NAME    = "NEON HUB",       -- Name shown on the loader
+    VERSION     = "V.02",           -- Version
+    EDITION     = "free",           -- "free" / "premium" / "cracked" etc.
+    GAME        = "BLOX FRUITS",      -- Target game
+
+    -- Key system
+    KEY_ENABLED  = false,            -- true → show key screen, false → skip to loader
+    VALID_KEY    = "FREE",-- Valid key (case-insensitive)
+    KEY_HINT     = "Get key → discord.gg/monohub",  -- Hint text shown below input
+    DISCORD      = "discord.gg/monohub",
+
+    -- Loading speed (multiplier)
+    LOAD_SPEED   = 1.0,             -- 1.0 = normal · 0.5 = fast · 3.5 = very slow
+
+    -- Colors (minimal B/W)
+    COL_BG      = Color3.fromRGB(0,   0,   0  ),
+    COL_WHITE   = Color3.fromRGB(255, 255, 255),
+    COL_DIM     = Color3.fromRGB(60,  60,  60 ),
+    COL_DIMMER  = Color3.fromRGB(28,  28,  28 ),
+    COL_BAR     = Color3.fromRGB(255, 255, 255),
+    COL_SUCCESS = Color3.fromRGB(180, 255, 180),
+    COL_ERROR   = Color3.fromRGB(255, 100, 100),
+}
+
+-- ══════════════════════════════════════════
+--  LOADING STEPS
+--  { text, target progress (0-1), { minWait, maxWait } }
+-- ══════════════════════════════════════════
+local STEPS = {
+    { "Initializing runtime environment...",       0.05,  {0.20, 0.40} },
+    { "Starting memory allocator...",              0.09,  {0.15, 0.30} },
+    { "Connecting to endpoint...",                 0.14,  {0.40, 0.80} },
+    { "Handshake with remote server...",           0.19,  {0.50, 0.90} },
+    { "Verifying session token...",                0.25,  {0.60, 1.00} },
+    { "Pulling latest release (build #2947)...",   0.31,  {0.40, 0.70} },
+    { "Checking integrity hash...",                0.36,  {0.30, 0.55} },
+    { "Decrypting core payload...",                0.43,  {0.50, 0.85} },
+    { "Loading execution engine...",               0.50,  {0.40, 0.65} },
+    { "Injecting module loader...",                0.57,  {0.35, 0.60} },
+    { "Mapping function hooks...",                 0.63,  {0.30, 0.55} },
+    { "Bypassing environment checks...",           0.69,  {0.50, 0.90} },
+    { "Patching memory flags...",                  0.74,  {0.40, 0.70} },
+    { "Resolving dependency tree...",              0.79,  {0.25, 0.50} },
+    { "Compiling script bundle...",                0.84,  {0.45, 0.75} },
+    { "Allocating UI resources...",                0.89,  {0.30, 0.55} },
+    { "Running pre-flight checks...",              0.94,  {0.35, 0.60} },
+    { "Finalizing injection...",                   0.98,  {0.40, 0.65} },
+    { "Done.",                                     1.00,  {0.15, 0.25} },
+}
+
+-- ══════════════════════════════════════════
+--  SERVICES
+-- ══════════════════════════════════════════
+local TweenService     = game:GetService("TweenService")
+local Players          = game:GetService("Players")
+local CoreGui          = game:GetService("CoreGui")
+local UserInputService = game:GetService("UserInputService")
+local RunService       = game:GetService("RunService")
+
+local lp = Players.LocalPlayer
+local pg = lp.PlayerGui
+
+-- Cleanup
+for _, v in ipairs(CoreGui:GetChildren()) do
+    if v.Name == "FakeLoader" then v:Destroy() end
+end
+
+-- ══════════════════════════════════════════
+--  HELPERS
+-- ══════════════════════════════════════════
+local function tw(obj, props, t, style, dir)
+    TweenService:Create(obj,
+        TweenInfo.new(t or 0.3,
+            style or Enum.EasingStyle.Quart,
+            dir   or Enum.EasingDirection.Out),
+        props):Play()
+end
+
+local function make(cls, props, parent)
+    local o = Instance.new(cls)
+    for k, v in pairs(props) do o[k] = v end
+    if parent then o.Parent = parent end
+    return o
+end
+
+local function rnd(a, b) return a + math.random() * (b - a) end
+local function waitRnd(a, b) task.wait(rnd(a, b) * CONFIG.LOAD_SPEED) end
+
+local function easeOut(t) return 1 - (1 - t)^3 end
+
+-- ══════════════════════════════════════════
+--  BUILD GUI
+-- ══════════════════════════════════════════
+local SG = make("ScreenGui", {
+    Name            = "FakeLoader",
+    ResetOnSpawn    = false,
+    IgnoreGuiInset  = true,
+    ZIndexBehavior  = Enum.ZIndexBehavior.Sibling,
+})
+pcall(function() SG.Parent = CoreGui end)
+if not SG.Parent then SG.Parent = pg end
+
+-- Fullscreen overlay
+local Overlay = make("Frame", {
+    Size                   = UDim2.fromScale(1, 1),
+    BackgroundColor3       = CONFIG.COL_BG,
+    BackgroundTransparency = 1,
+    BorderSizePixel        = 0,
+    ZIndex                 = 100,
+}, SG)
+
+-- ─────────────────────────────────────────
+--  Center container
+-- ─────────────────────────────────────────
+local CW, CH = 380, 260
+local Center = make("Frame", {
+    Size                   = UDim2.fromOffset(CW, CH),
+    Position               = UDim2.new(0.5, -CW/2, 0.5, -CH/2),
+    BackgroundTransparency = 1,
+    BorderSizePixel        = 0,
+    ZIndex                 = 101,
+}, Overlay)
+
+-- ── Title block ───────────────────────────
+local HubName = make("TextLabel", {
+    Size                   = UDim2.new(1, 0, 0, 28),
+    Position               = UDim2.fromOffset(0, 0),
+    BackgroundTransparency = 1,
+    Text                   = CONFIG.HUB_NAME,
+    Font                   = Enum.Font.GothamBold,
+    TextSize               = 24,
+    TextColor3             = CONFIG.COL_WHITE,
+    TextTransparency       = 1,
+    TextXAlignment         = Enum.TextXAlignment.Left,
+    ZIndex                 = 102,
+}, Center)
+
+-- Version / edition / game line
+local SubLine = make("TextLabel", {
+    Size                   = UDim2.new(1, 0, 0, 13),
+    Position               = UDim2.fromOffset(0, 32),
+    BackgroundTransparency = 1,
+    Text                   = CONFIG.VERSION.."  ·  "..CONFIG.EDITION.."  ·  "..CONFIG.GAME,
+    Font                   = Enum.Font.Gotham,
+    TextSize               = 10,
+    TextColor3             = CONFIG.COL_DIM,
+    TextTransparency       = 1,
+    TextXAlignment         = Enum.TextXAlignment.Left,
+    ZIndex                 = 102,
+}, Center)
+
+-- Discord line
+local DiscordLine = make("TextLabel", {
+    Size                   = UDim2.new(1, 0, 0, 11),
+    Position               = UDim2.fromOffset(0, 48),
+    BackgroundTransparency = 1,
+    Text                   = CONFIG.DISCORD,
+    Font                   = Enum.Font.Gotham,
+    TextSize               = 9,
+    TextColor3             = Color3.fromRGB(40, 40, 40),
+    TextTransparency       = 1,
+    TextXAlignment         = Enum.TextXAlignment.Left,
+    ZIndex                 = 102,
+}, Center)
+
+-- Separator line
+local Sep = make("Frame", {
+    Size                   = UDim2.new(1, 0, 0, 1),
+    Position               = UDim2.fromOffset(0, 68),
+    BackgroundColor3       = CONFIG.COL_DIMMER,
+    BackgroundTransparency = 1,
+    BorderSizePixel        = 0,
+    ZIndex                 = 102,
+}, Center)
+
+-- ─────────────────────────────────────────
+--  KEY SCREEN (shown when KEY_ENABLED = true)
+-- ─────────────────────────────────────────
+local KeyFrame = make("Frame", {
+    Size                   = UDim2.new(1, 0, 0, 120),
+    Position               = UDim2.fromOffset(0, 80),
+    BackgroundTransparency = 1,
+    BorderSizePixel        = 0,
+    ZIndex                 = 102,
+    Visible                = false,
+}, Center)
+
+-- "Enter key" label
+make("TextLabel", {
+    Size                   = UDim2.new(1, 0, 0, 14),
+    Position               = UDim2.fromOffset(0, 0),
+    BackgroundTransparency = 1,
+    Text                   = "ENTER KEY",
+    Font                   = Enum.Font.GothamBold,
+    TextSize               = 10,
+    TextColor3             = CONFIG.COL_DIM,
+    TextXAlignment         = Enum.TextXAlignment.Left,
+    ZIndex                 = 103,
+}, KeyFrame)
+
+-- Input box background
+local InputBG = make("Frame", {
+    Size             = UDim2.new(1, 0, 0, 34),
+    Position         = UDim2.fromOffset(0, 18),
+    BackgroundColor3 = Color3.fromRGB(10, 10, 10),
+    BorderSizePixel  = 0,
+    ZIndex           = 103,
+}, KeyFrame)
+make("UICorner", { CornerRadius = UDim.new(0, 5) }, InputBG)
+make("UIStroke", { Color = Color3.fromRGB(35, 35, 35), Thickness = 1 }, InputBG)
+
+-- TextBox
+local KeyBox = make("TextBox", {
+    Size              = UDim2.new(1, -16, 1, 0),
+    Position          = UDim2.fromOffset(8, 0),
+    BackgroundTransparency = 1,
+    Text              = "",
+    PlaceholderText   = "xxxx-xxxx-xxxx",
+    Font              = Enum.Font.Code,
+    TextSize          = 12,
+    TextColor3        = CONFIG.COL_WHITE,
+    PlaceholderColor3 = Color3.fromRGB(45, 45, 45),
+    TextXAlignment    = Enum.TextXAlignment.Left,
+    ClearTextOnFocus  = false,
+    ZIndex            = 104,
+}, InputBG)
+
+-- Submit button
+local SubmitBtn = make("TextButton", {
+    Size             = UDim2.new(1, 0, 0, 30),
+    Position         = UDim2.fromOffset(0, 58),
+    BackgroundColor3 = CONFIG.COL_WHITE,
+    BorderSizePixel  = 0,
+    Text             = "CONFIRM",
+    Font             = Enum.Font.GothamBold,
+    TextSize         = 11,
+    TextColor3       = CONFIG.COL_BG,
+    AutoButtonColor  = false,
+    ZIndex           = 103,
+}, KeyFrame)
+make("UICorner", { CornerRadius = UDim.new(0, 5) }, SubmitBtn)
+
+-- Hint / error text
+local KeyHint = make("TextLabel", {
+    Size                   = UDim2.new(1, 0, 0, 12),
+    Position               = UDim2.fromOffset(0, 94),
+    BackgroundTransparency = 1,
+    Text                   = CONFIG.KEY_HINT,
+    Font                   = Enum.Font.Gotham,
+    TextSize               = 9,
+    TextColor3             = Color3.fromRGB(38, 38, 38),
+    TextXAlignment         = Enum.TextXAlignment.Left,
+    ZIndex                 = 103,
+}, KeyFrame)
+
+-- Button hover effect
+SubmitBtn.MouseEnter:Connect(function()
+    tw(SubmitBtn, { BackgroundColor3 = Color3.fromRGB(210, 210, 210) }, 0.1)
+end)
+SubmitBtn.MouseLeave:Connect(function()
+    tw(SubmitBtn, { BackgroundColor3 = CONFIG.COL_WHITE }, 0.1)
+end)
+
+-- ─────────────────────────────────────────
+--  LOADER ELEMENTS (shown after key is accepted)
+-- ─────────────────────────────────────────
+local LoadFrame = make("Frame", {
+    Size                   = UDim2.new(1, 0, 0, 80),
+    Position               = UDim2.fromOffset(0, 80),
+    BackgroundTransparency = 1,
+    BorderSizePixel        = 0,
+    ZIndex                 = 102,
+    Visible                = false,
+}, Center)
+
+-- Progress bar background
+local BarBG = make("Frame", {
+    Size             = UDim2.new(1, 0, 0, 1),
+    Position         = UDim2.fromOffset(0, 0),
+    BackgroundColor3 = CONFIG.COL_DIMMER,
+    BorderSizePixel  = 0,
+    ZIndex           = 103,
+}, LoadFrame)
+
+-- Progress bar fill
+local BarFill = make("Frame", {
+    Size             = UDim2.fromOffset(0, 1),
+    BackgroundColor3 = CONFIG.COL_BAR,
+    BorderSizePixel  = 0,
+    ZIndex           = 104,
+}, BarBG)
+
+-- Current step text
+local StepTxt = make("TextLabel", {
+    Size                   = UDim2.new(1, -50, 0, 14),
+    Position               = UDim2.fromOffset(0, 12),
+    BackgroundTransparency = 1,
+    Text                   = "",
+    Font                   = Enum.Font.Code,
+    TextSize               = 10,
+    TextColor3             = CONFIG.COL_DIM,
+    TextTransparency       = 0,
+    TextXAlignment         = Enum.TextXAlignment.Left,
+    ZIndex                 = 103,
+}, LoadFrame)
+
+-- Percentage counter
+local PctTxt = make("TextLabel", {
+    Size                   = UDim2.fromOffset(44, 14),
+    Position               = UDim2.new(1, -44, 0, 12),
+    BackgroundTransparency = 1,
+    Text                   = "0%",
+    Font                   = Enum.Font.GothamBold,
+    TextSize               = 10,
+    TextColor3             = CONFIG.COL_WHITE,
+    TextXAlignment         = Enum.TextXAlignment.Right,
+    ZIndex                 = 103,
+}, LoadFrame)
+
+-- Step history list (last 4 steps)
+local HistoryFrame = make("Frame", {
+    Size                   = UDim2.new(1, 0, 0, 56),
+    Position               = UDim2.fromOffset(0, 32),
+    BackgroundTransparency = 1,
+    ZIndex                 = 102,
+}, LoadFrame)
+make("UIListLayout", {
+    Padding   = UDim.new(0, 2),
+    SortOrder = Enum.SortOrder.LayoutOrder,
+}, HistoryFrame)
+
+local historyLines = {}
+local function addHistory(txt)
+    -- Keep max 4 lines
+    if #historyLines >= 4 then
+        local oldest = historyLines[1]
+        tw(oldest, { TextTransparency = 1 }, 0.2)
+        task.delay(0.22, function() oldest:Destroy() end)
+        table.remove(historyLines, 1)
+        -- Update layout order
+        for i, l in ipairs(historyLines) do l.LayoutOrder = i end
+    end
+    local lbl = make("TextLabel", {
+        Size                   = UDim2.new(1, 0, 0, 12),
+        BackgroundTransparency = 1,
+        Text                   = "· "..txt,
+        Font                   = Enum.Font.Code,
+        TextSize               = 8,
+        TextColor3             = Color3.fromRGB(38, 38, 38),
+        TextTransparency       = 1,
+        TextXAlignment         = Enum.TextXAlignment.Left,
+        ZIndex                 = 103,
+        LayoutOrder            = #historyLines + 1,
+    }, HistoryFrame)
+    tw(lbl, { TextTransparency = 0 }, 0.25)
+    table.insert(historyLines, lbl)
+end
+
+-- Footer text
+local FootTxt = make("TextLabel", {
+    Size                   = UDim2.new(1, 0, 0, 10),
+    Position               = UDim2.fromOffset(0, 230),
+    BackgroundTransparency = 1,
+    Text                   = "do not close · "..CONFIG.HUB_NAME.." "..CONFIG.VERSION,
+    Font                   = Enum.Font.Gotham,
+    TextSize               = 8,
+    TextColor3             = Color3.fromRGB(22, 22, 22),
+    TextTransparency       = 1,
+    TextXAlignment         = Enum.TextXAlignment.Left,
+    ZIndex                 = 102,
+}, Center)
+
+-- ══════════════════════════════════════════
+--  FADE HELPERS
+-- ══════════════════════════════════════════
+local function showOverlay()
+    tw(Overlay, { BackgroundTransparency = 0 }, 0.5, Enum.EasingStyle.Sine)
+    task.wait(0.35)
+end
+
+local function hideAll()
+    for _, obj in ipairs(Center:GetDescendants()) do
+        if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
+            tw(obj, { TextTransparency = 1 }, 0.3)
+        end
+        if obj:IsA("Frame") then
+            tw(obj, { BackgroundTransparency = 1 }, 0.3)
+        end
+    end
+    task.wait(0.35)
+    tw(Overlay, { BackgroundTransparency = 1 }, 0.45, Enum.EasingStyle.Sine)
+    task.wait(0.5)
+end
+
+-- ══════════════════════════════════════════
+--  SHOW HEADER
+-- ══════════════════════════════════════════
+local function showHeader()
+    showOverlay()
+    tw(HubName,     { TextTransparency = 0 }, 0.5)
+    task.wait(0.1)
+    tw(SubLine,     { TextTransparency = 0 }, 0.4)
+    task.wait(0.08)
+    tw(DiscordLine, { TextTransparency = 0 }, 0.35)
+    task.wait(0.08)
+    tw(Sep,         { BackgroundTransparency = 0 }, 0.3)
+    task.wait(0.1)
+end
+
+-- ══════════════════════════════════════════
+--  KEY SCREEN
+-- ══════════════════════════════════════════
+local keySuccess = false
+
+local function showKeyScreen()
+    KeyFrame.Visible = true
+    -- Fade in all elements
+    for _, obj in ipairs(KeyFrame:GetDescendants()) do
+        if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
+            obj.TextTransparency = 1
+            tw(obj, { TextTransparency = 0 }, 0.35)
+        elseif obj:IsA("Frame") then
+            obj.BackgroundTransparency = 1
+            tw(obj, { BackgroundTransparency = 0 }, 0.35)
+        end
+    end
+    InputBG.BackgroundTransparency = 0
+    tw(FootTxt, { TextTransparency = 0 }, 0.4)
+
+    -- Key validation
+    local done = false
+    SubmitBtn.MouseButton1Click:Connect(function()
+        if done then return end
+        local entered = KeyBox.Text:upper():gsub("%s", "")
+        local valid   = CONFIG.VALID_KEY:upper():gsub("%s", "")
+
+        if entered == valid then
+            done = true
+            keySuccess = true
+            tw(InputBG, { BackgroundColor3 = Color3.fromRGB(5, 18, 5) }, 0.3)
+            KeyHint.Text = "✓  Key accepted"
+            tw(KeyHint, { TextColor3 = CONFIG.COL_SUCCESS }, 0.3)
+            task.wait(0.7)
+        else
+            -- Wrong key: shake + red tint
+            tw(InputBG, { BackgroundColor3 = Color3.fromRGB(18, 5, 5) }, 0.2)
+            tw(KeyHint, { TextColor3 = CONFIG.COL_ERROR }, 0.2)
+            KeyHint.Text = "✗  Invalid key — "..CONFIG.KEY_HINT
+
+            -- Small shake animation
+            local origX = InputBG.Position.X.Offset
+            for i = 1, 4 do
+                tw(InputBG, { Position = UDim2.fromOffset(origX + (i%2==0 and 5 or -5), 18) }, 0.05)
+                task.wait(0.06)
+            end
+            tw(InputBG, { Position = UDim2.fromOffset(origX, 18) }, 0.1)
+            task.wait(0.3)
+            tw(InputBG, { BackgroundColor3 = Color3.fromRGB(10, 10, 10) }, 0.3)
+        end
+    end)
+
+    -- Wait until key is accepted
+    while not keySuccess do task.wait(0.1) end
+
+    -- Hide key frame
+    for _, obj in ipairs(KeyFrame:GetDescendants()) do
+        if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
+            tw(obj, { TextTransparency = 1 }, 0.25)
+        elseif obj:IsA("Frame") then
+            tw(obj, { BackgroundTransparency = 1 }, 0.25)
+        end
+    end
+    task.wait(0.3)
+    KeyFrame.Visible = false
+end
+
+-- ══════════════════════════════════════════
+--  LOADER LOOP
+-- ══════════════════════════════════════════
+local function runLoader()
+    LoadFrame.Visible = true
+    BarBG.BackgroundTransparency = 0
+
+    local currentProg = 0
+
+    for i, step in ipairs(STEPS) do
+        local targetProg = step[2]
+        local delay      = step[3]
+
+        -- Update step text
+        tw(StepTxt, { TextTransparency = 1 }, 0.08)
+        task.wait(0.1)
+        StepTxt.Text = step[1]
+        tw(StepTxt, { TextTransparency = 0 }, 0.15)
+
+        -- Add to history every 2 steps
+        if i % 2 == 0 then addHistory(step[1]) end
+
+        -- Progress bar tween
+        local tweenTime = (0.35 + (targetProg - currentProg) * 1.0) * CONFIG.LOAD_SPEED
+        TweenService:Create(BarFill,
+            TweenInfo.new(tweenTime, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+            { Size = UDim2.new(targetProg, 0, 1, 0) }):Play()
+
+        -- Percentage counter
+        task.spawn(function()
+            local startP  = currentProg
+            local elapsed = 0
+            while elapsed < tweenTime do
+                elapsed = elapsed + task.wait(0.033)
+                local t   = math.min(elapsed / tweenTime, 1)
+                local pct = math.floor((startP + (targetProg - startP) * easeOut(t)) * 100)
+                PctTxt.Text = pct.."%"
+            end
+            PctTxt.Text = math.floor(targetProg * 100).."%"
+        end)
+
+        currentProg = targetProg
+        waitRnd(delay[1], delay[2])
+    end
+
+    -- Final line
+    task.wait(0.2)
+    tw(StepTxt, { TextTransparency = 1 }, 0.12)
+    task.wait(0.15)
+    StepTxt.Text = "Script loaded successfully."
+    StepTxt.TextColor3 = Color3.fromRGB(180, 180, 180)
+    tw(StepTxt, { TextTransparency = 0 }, 0.3)
+    task.wait(0.9)
+end
+
+-- ══════════════════════════════════════════
+--  MAIN FLOW
+-- ══════════════════════════════════════════
+showHeader()
+
+if CONFIG.KEY_ENABLED then
+    showKeyScreen()
+end
+
+-- Show loader
+tw(FootTxt, { TextTransparency = 0 }, 0.35)
+runLoader()
+
+-- Close
+hideAll()
+SG:Destroy()
+
+-- ══════════════════════════════════════════
+--  Add your script below:
+-- ══════════════════════════════════════════
+-- loadstring(game:HttpGet("https://raw.githubusercontent.com/bryanscripts4/Bloxfruits-duper-script-made-by-bryanscripts/refs/heads/main/LUA"))()
+
+print("[FakeLoader] Done — "..CONFIG.HUB_NAME.." "..CONFIG.VERSION)
